@@ -24,9 +24,9 @@ else {
 }
 //include language strings for translation
 $lng=$_SERVER["HTTP_ACCEPT_LANGUAGE"];
-if (str_contains($lng,"uk-UA")) {
+if (strpos($lng,"uk-UA")) {
   setLang(1);
-} elseif (str_contains($lng,"ru")) { 
+} elseif (strpos($lng,"ru")) { 
   setLang(2);
 } else { 
   setLang(3);
