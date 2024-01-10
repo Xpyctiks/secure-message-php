@@ -8,6 +8,8 @@ This small simple PHP script allows you to secure share any text data via any me
 - The receiver opens the link. 
     - If everything is ok, he sees a confirmation dialog to show the encrypted data.After confirmation, the receiver sees your text.The link can't be opened anymore.
     - If somebody already opened the message - the receiver will see an error message that this message doesn't exist anymore.That means your data is stolen and you must quickliy change it.And the messenger is not secure anymore.
+- The script includes file "lang.php" which contains 3x language translations - UA, RU, EN. Locale is autodetected by headers from your web browser.
+- Also the script uses some Bootstrap files.Just to look better then it can be.
 
 ## Installation
 * The script requires MySQL database. You need to create database and user/pass for it. After that, upload the scheme from scheme.sql file.
