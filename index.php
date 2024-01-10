@@ -51,7 +51,6 @@ if (isset($_GET['clean']))
       $mysqli="DELETE FROM `messages` WHERE id='".$id."'";
       $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
       $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','expired,unread');";
-      file_put_contents("test.txt",$mysqli);
       $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
       $counter++;
     }
