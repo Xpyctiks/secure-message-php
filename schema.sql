@@ -6,7 +6,9 @@ CREATE TABLE `messages` (
   `lifetime` varchar(12) NOT NULL COMMENT 'How long does it valid',
   `token` varchar(40) NOT NULL COMMENT 'CSRF token',
   `link` varchar(32) NOT NULL COMMENT 'Link for external access',
-  `message` text NOT NULL,
+  `message` text NOT NULL COMMENT 'Encrypted message',
+  `file` longtext DEFAULT NULL COMMENT 'Base64 encoded file attachment',
+  `file_name` varchar(100) DEFAULT NULL COMMENT 'Original file name'
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 DROP TABLE IF EXISTS `msglogs`;
@@ -16,5 +18,6 @@ CREATE TABLE `msglogs` (
   `msglink` varchar(150) NOT NULL COMMENT 'link for the message',
   `opened` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Time when a record was opened',
   `ip` varchar(20) NOT NULL COMMENT 'IP of an external access',
+  `type` varchar(10) NOT NULL
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
