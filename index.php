@@ -1,4 +1,6 @@
 <?php
+//Release 1.2
+//
 //file with lang. translations
 require_once "lang.php";
 //main configuration file
@@ -96,8 +98,10 @@ function generateRandomString($length = 32) {
 //Create link and secure data function
 if (isset($_POST['create'])) {
   //check all variables are set and not empty
-  if ((!isset($_POST['textMain'])) || (!isset($_POST['timeValid'])) || (empty($_POST['textMain'])) || (empty($_POST['timeValid']))) {
+  if ((!isset($_POST['textMain'])) || (!isset($_POST['timeValid'])) || ((empty($_POST['textMain'])) && ($_FILES['userfile']['size'] == 0)) || (empty($_POST['timeValid']))) {
     echo("<script>alert('".$lang_err1."');</script>");
+    echo("<p>".$lang_err1."</p>");
+    echo("<p><a href=\"https://".$_SERVER['SERVER_NAME'].$_SERVER['PHP_SELF']."\">.".$lang_ret."</a></p>");
     die();
   }
   //checking CSRF
@@ -112,7 +116,22 @@ if (isset($_POST['create'])) {
   $encryption_key=$key;
   $link=generateRandomString();
   $encrypted_text=openssl_encrypt(trim(htmlspecialchars($_POST['textMain'])), $ciphering, $encryption_key, $options, $encryption_iv);
-  $mysqli="INSERT INTO `messages` (`created`,`lifetime`,`token`,`link`,`message`) VALUES ('".time()."','".(trim(htmlspecialchars($_POST['timeValid']))*3600)."','".(trim(htmlspecialchars($_POST['csrfToken'])))."','".$link."','".$encrypted_text."')";
+  $uploaddir = '/tmp/';
+  $uploadfile = $uploaddir.basename($_FILES['userfile']['name']);
+  if ($_FILES['userfile']['size'] > 0) {
+    if (move_uploaded_file($_FILES['userfile']['tmp_name'], $uploadfile)) {
+      $data=file_get_contents($uploadfile);
+      $dataBase64=openssl_encrypt(base64_encode($data), $ciphering, $encryption_key, $options, $encryption_iv);
+      file_put_contents('/tmp/test.base64',$dataBase64);
+    } else {
+      echo "Возможная атака с помощью файловой загрузки!\n";
+    }
+  }
+  if ($_FILES['userfile']['size'] > 0) {
+    $mysqli="INSERT INTO `messages` (`created`,`lifetime`,`token`,`link`,`message`,`file`,`file_name`) VALUES ('".time()."','".(trim(htmlspecialchars($_POST['timeValid']))*3600)."','".(trim(htmlspecialchars($_POST['csrfToken'])))."','".$link."','".$encrypted_text."','".$dataBase64."','".$_FILES['userfile']['name']."')";
+  } else {
+    $mysqli="INSERT INTO `messages` (`created`,`lifetime`,`token`,`link`,`message`) VALUES ('".time()."','".(trim(htmlspecialchars($_POST['timeValid']))*3600)."','".(trim(htmlspecialchars($_POST['csrfToken'])))."','".$link."','".$encrypted_text."')";
+  }
   $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
   ?>
   <div class="bg-light p-5 rounded">
@@ -154,6 +173,8 @@ if (isset($_GET['link'])) {
     $created=$result['created'];
     $id=$result['id'];
     $link=$result['link'];
+    $file=$result['file'];
+    $fileName=$result['file_name'];
   }
   //Checking does the link is still valid
   if (($created+$lifetime) < time()) {
@@ -171,7 +192,7 @@ if (isset($_GET['link'])) {
     die();
   }
   //If "open" value not sent, just generating Show secure message button 
-  if (!isset($_POST['open'])) {
+  if (!isset($_POST['open']) && (!isset($_POST['dwlAttachment']))) {
   ?>
   <div class="bg-light p-5 rounded">
     <div class="col-sm-8 mx-auto">
@@ -197,15 +218,40 @@ if (isset($_GET['link'])) {
     ?>
     <div class="bg-light p-5 rounded">
       <div class="col-sm-8 mx-auto">
-        <h1><?php echo($lang_text);?></h1>
-        <h3><pre><?php echo($decrypted_text);?></pre></h3>
+        <h1><?php echo($lang_text);?></h1>  
+         <h3><pre><?php if ($encrypted_text!="") { echo($decrypted_text); } else { echo("<font color=\"red\">$lang_err7</font>"); }?></pre></h3>
+         <?php if ($file != "") {?>
+         <div><form method="POST" action="">
+          <button class="btn-lg btn-primary" style="width1: 95vw;" type="submit" name="dwlAttachment"><?php echo($lang_main6);?></button>
+          </form></div>
+          <?php 
+            $mysqli="UPDATE `messages` set message='' WHERE id='".$id."'";
+            $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
+            $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`,`type`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."','text');";
+            $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
+          } ?>
         <a href="closeWindow();"><?php echo($lang_cls);?></a>
       </div>
     </div>
     <?php
+    die();
+  }
+  if (isset($_POST['dwlAttachment'])) {
+    $ciphering="AES256";
+    $iv_length=openssl_cipher_iv_length($ciphering);
+    $options=0;
+    $encryption_iv=mb_substr($token,0,6).mb_substr($token,0,6)."1467";
+    $encryption_key=$key;
+    $decrypted_file=openssl_decrypt($file, $ciphering, $encryption_key, $options, $encryption_iv);
+    file_put_contents("/tmp/".$fileName,base64_decode($decrypted_file));
+    $file_path = "/tmp/".$fileName;
+    $file_name = "$fileName";
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: attachment; filename="'.$fileName.'"');
+    readfile($file_path);
     $mysqli="DELETE FROM `messages` WHERE id='".$id."'";
     $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
-    $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."');";
+    $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`,`type`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."','file');";
     $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
     die();
   }
@@ -221,7 +267,8 @@ setcookie("CSRF", $token, time() + 600, "/");
       <p class="col-lg-101 fs-51" style="text-align: center;"><?php echo($lang_main2);?></p>
     </div>
     <div id="bottom-block" style="postion: absolute; padding-right: 1rem;">
-      <form class="p-4 p-md-5 border rounded-3 bg-light" method="POST">
+      <form class="p-4 p-md-5 border rounded-3 bg-light" enctype="multipart/form-data" method="POST">
+        <input type="hidden" name="MAX_FILE_SIZE" value="16535000" />
         <div id="main-text-field" class="form-floating mb-3">
           <textarea style="height: 300px;" class="form-control" id="textInput" name="textMain"></textarea>
           <label for="textInput"><?php echo($lang_main3);?></label>
@@ -229,6 +276,9 @@ setcookie("CSRF", $token, time() + 600, "/");
         <div class="form-floating1 mb-1">
           <input type="number" style="width: 210px;"  class="form-control" id="hoursInput" min="0" max="24" value="1" name="timeValid">
           <label for="hoursInput"><?php echo($lang_main4);?></label>
+          <div class="form-floating2 mb-2">
+            Отправить файл: <input name="userfile" type="file" />
+          </div>
         </div>
         <hr class="my-4">
         <button class="btn-lg btn-primary" style="width1: 95vw;" type="submit" name="create"><?php echo($lang_main5);?></button>
