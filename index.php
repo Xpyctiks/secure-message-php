@@ -95,12 +95,6 @@ if (!isset($_POST['dwlAttachment'])) {?>
     <link rel="icon" type="image/png" href="favicon.png" />
     <title><?php echo($lang_title);?></title>
     <link href="css/bootstrap.min.css" rel="stylesheet">
-    <script>
-      function closeWindow() {
-        window.open('','_self');
-        window.close();
-      }
-    </script> 
   </head>
 <body>
 <?php }
@@ -256,11 +250,12 @@ if (isset($_GET['link'])) {
           $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`,`type`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."','text');";
           $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
         } else {
-        $mysqli="DELETE FROM `messages` WHERE id='".$id."'";
-        $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
-        $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`,`type`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."','text');";
-        $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC); } ?>
-        <br><a href="closeWindow();"><?php echo($lang_cls);?></a>
+          $mysqli="DELETE FROM `messages` WHERE id='".$id."'";
+          $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
+          $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`,`type`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."','text');";
+          $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC); 
+        }
+        echo("<br><p><a href=\"https://".$_SERVER['SERVER_NAME'].$_SERVER['PHP_SELF']."\">".$lang_ret."</a></p>"); ?>
       </div>
     </div>
     <?php
@@ -313,11 +308,12 @@ if (isset($_GET['link'])) {
             $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
 
           } else {
-          $mysqli="DELETE FROM `messages` WHERE id='".$id."'";
-          $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
-          $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`,`type`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."','text');";
-          $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC); } ?>
-          <br><a href="closeWindow();"><?php echo($lang_cls);?></a>
+            $mysqli="DELETE FROM `messages` WHERE id='".$id."'";
+            $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
+            $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`,`type`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."','text');";
+            $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC); 
+          }
+          echo("<br><p><a href=\"https://".$_SERVER['SERVER_NAME'].$_SERVER['PHP_SELF']."\">".$lang_ret."</a></p>"); ?>
           </div>
         </div>
         <?php

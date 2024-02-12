@@ -29,7 +29,6 @@ function setLang($locale) {
   global $lang_conf;
   global $lang_open;
   global $lang_text;
-  global $lang_cls;
   switch ($locale) {
     case 1:
       $lang_meta="uk";
@@ -60,7 +59,6 @@ function setLang($locale) {
       $lang_conf="Пiдтвердiть вiдкриття посилання.<br>Пiсля цього воно буде показано один раз и видалено:";
       $lang_open="Вiдкрити посилання";
       $lang_text="Ось текст що був зашифрован:";
-      $lang_cls="Закрити вкладку";
       break;
     case 2:
       $lang_meta="ru";
@@ -91,7 +89,6 @@ function setLang($locale) {
       $lang_conf="Подтвердите открытие ссылки.<br>После этого оно будет показано один раз и удалено:";
       $lang_open="Открыть ссылку";
       $lang_text="Вот текст что был зашифрован:";
-      $lang_cls="Закрыть вкладку";
       break;
     case 3:
       $lang_meta="en";
@@ -122,7 +119,6 @@ function setLang($locale) {
       $lang_conf="Confirm link opening.<br>After that you will see the stored message once and it will be deleted.";
       $lang_open="Open link";
       $lang_text="Here is your data that was encrypted:";
-      $lang_cls="Close the tab";
       break;
   }
 }
