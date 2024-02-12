@@ -8,7 +8,8 @@ CREATE TABLE `messages` (
   `link` varchar(32) NOT NULL COMMENT 'Link for external access',
   `message` text NOT NULL COMMENT 'Encrypted message',
   `file` longtext DEFAULT NULL COMMENT 'Base64 encoded file attachment',
-  `file_name` varchar(100) DEFAULT NULL COMMENT 'Original file name'
+  `file_name` varchar(100) DEFAULT NULL COMMENT 'Original file name',
+  `psk` varchar(1) NOT NULL DEFAULT '0' COMMENT 'Is encrypted with additional password?'
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 DROP TABLE IF EXISTS `msglogs`;

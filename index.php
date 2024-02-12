@@ -1,10 +1,13 @@
 <?php
-//Release 1.2
+//Release 1.3
 //
 //file with lang. translations
 require_once "lang.php";
 //main configuration file
 $configFile="config.php";
+//psk variable. by default is - means no aditional password for encryption is added
+$psk="0";
+$token="";
 //Include config file - checks, generation if it is absent, and so on.
 if (file_exists($configFile) && !empty($configFile)) {
   include_once $configFile;
@@ -25,7 +28,9 @@ else {
   die();
 }
 //include language strings for translation
-$lng=$_SERVER["HTTP_ACCEPT_LANGUAGE"];
+if (isset($_SERVER["HTTP_ACCEPT_LANGUAGE"])) {
+  $lng=$_SERVER["HTTP_ACCEPT_LANGUAGE"];
+}
 if (strpos($lng,"uk-UA")) {
   setLang(1);
 } elseif (strpos($lng,"ru")) { 
@@ -37,6 +42,9 @@ if (strpos($lng,"uk-UA")) {
 $mysqli_dsn="mysql:host={$mysqli_host};dbname={$mysqli_db}";
 $mysqli_options=[ PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8', ];
 $mysqli_dbh=new PDO($mysqli_dsn, $mysqli_dbuser, $mysqli_dbpass, $mysqli_options);
+$ciphering="AES256";
+$iv_length=openssl_cipher_iv_length($ciphering);
+$options=0;
 
 //daily function to clean all expired data in DB
 if (isset($_GET['clean'])) {
@@ -76,7 +84,8 @@ function generateRandomString($length = 32) {
   }
   return $randomString;
 }
-?>
+
+if (!isset($_POST['dwlAttachment'])) {?>
 <!doctype html>
 <html lang="<?php echo($lang_meta);?>">
   <head>
@@ -94,14 +103,14 @@ function generateRandomString($length = 32) {
     </script> 
   </head>
 <body>
-<?php
+<?php }
 //Create link and secure data function
 if (isset($_POST['create'])) {
   //check all variables are set and not empty
   if ((!isset($_POST['textMain'])) || (!isset($_POST['timeValid'])) || ((empty($_POST['textMain'])) && ($_FILES['userfile']['size'] == 0)) || (empty($_POST['timeValid']))) {
     echo("<script>alert('".$lang_err1."');</script>");
     echo("<p>".$lang_err1."</p>");
-    echo("<p><a href=\"https://".$_SERVER['SERVER_NAME'].$_SERVER['PHP_SELF']."\">.".$lang_ret."</a></p>");
+    echo("<p><a href=\"https://".$_SERVER['SERVER_NAME'].$_SERVER['PHP_SELF']."\">".$lang_ret."</a></p>");
     die();
   }
   //checking CSRF
@@ -109,28 +118,35 @@ if (isset($_POST['create'])) {
     echo("<script>alert('".$lang_err2."');</script>");
     die();
   }
-  $ciphering="AES256";
-  $iv_length=openssl_cipher_iv_length($ciphering);
-  $options=0;
   $encryption_iv=mb_substr($_POST['csrfToken'],0,6).mb_substr($_POST['csrfToken'],0,6)."1467";
-  $encryption_key=$key;
   $link=generateRandomString();
-  $encrypted_text=openssl_encrypt(trim(htmlspecialchars($_POST['textMain'])), $ciphering, $encryption_key, $options, $encryption_iv);
+  $encryption_key=$key;
+  if (!empty($_POST['textMain'])) {
+    $encrypted_text=openssl_encrypt(trim(htmlspecialchars($_POST['textMain'])), $ciphering, $encryption_key, $options, $encryption_iv);
+    if (!empty($_POST['pskInput'])) {
+      $encrypted_text=openssl_encrypt($encrypted_text, $ciphering, $_POST['pskInput'], $options, $encryption_iv);
+      $psk="1";
+    }
+  } else {
+    $encrypted_text="-";
+  }
   $uploaddir = '/tmp/';
   $uploadfile = $uploaddir.basename($_FILES['userfile']['name']);
   if ($_FILES['userfile']['size'] > 0) {
     if (move_uploaded_file($_FILES['userfile']['tmp_name'], $uploadfile)) {
       $data=file_get_contents($uploadfile);
       $dataBase64=openssl_encrypt(base64_encode($data), $ciphering, $encryption_key, $options, $encryption_iv);
-      file_put_contents('/tmp/test.base64',$dataBase64);
-    } else {
-      echo "Возможная атака с помощью файловой загрузки!\n";
+      if (!empty($_POST['pskInput'])) {
+        $dataBase64=openssl_encrypt($dataBase64, $ciphering, $_POST['pskInput'], $options, $encryption_iv);
+        $psk="1";
+      }
+      unlink($uploadfile);
     }
   }
   if ($_FILES['userfile']['size'] > 0) {
-    $mysqli="INSERT INTO `messages` (`created`,`lifetime`,`token`,`link`,`message`,`file`,`file_name`) VALUES ('".time()."','".(trim(htmlspecialchars($_POST['timeValid']))*3600)."','".(trim(htmlspecialchars($_POST['csrfToken'])))."','".$link."','".$encrypted_text."','".$dataBase64."','".$_FILES['userfile']['name']."')";
+    $mysqli="INSERT INTO `messages` (`created`,`lifetime`,`token`,`link`,`message`,`file`,`file_name`,`psk`) VALUES ('".time()."','".(trim(htmlspecialchars($_POST['timeValid']))*3600)."','".(trim(htmlspecialchars($_POST['csrfToken'])))."','".$link."','".$encrypted_text."','".$dataBase64."','".$_FILES['userfile']['name']."','".$psk."')";
   } else {
-    $mysqli="INSERT INTO `messages` (`created`,`lifetime`,`token`,`link`,`message`) VALUES ('".time()."','".(trim(htmlspecialchars($_POST['timeValid']))*3600)."','".(trim(htmlspecialchars($_POST['csrfToken'])))."','".$link."','".$encrypted_text."')";
+    $mysqli="INSERT INTO `messages` (`created`,`lifetime`,`token`,`link`,`message`,`psk`) VALUES ('".time()."','".(trim(htmlspecialchars($_POST['timeValid']))*3600)."','".(trim(htmlspecialchars($_POST['csrfToken'])))."','".$link."','".$encrypted_text."','".$psk."')";
   }
   $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
   ?>
@@ -175,6 +191,7 @@ if (isset($_GET['link'])) {
     $link=$result['link'];
     $file=$result['file'];
     $fileName=$result['file_name'];
+    $isPsk=$result['psk'];
   }
   //Checking does the link is still valid
   if (($created+$lifetime) < time()) {
@@ -200,6 +217,10 @@ if (isset($_GET['link'])) {
         <p>
           <form method="POST" action="">
             <button class="btn-lg btn-primary" style="align: center; width: 300px;" type="submit" name="open"><?php echo($lang_open);?></button>
+            <?php if ($isPsk=="1") { ?>
+              <p><label for="pskOpInput"><?php echo($lang_main9);?></label>
+              <input type="text" style="width: 210px;" class="form-control" id="pskOpInput" value="" name="pskOpInput"></p>
+            <?php } ?>
           </form>
         </p>
     </div>
@@ -207,48 +228,108 @@ if (isset($_GET['link'])) {
   <?php
   die();
   }
-  //if "open" value is set, showing up encrypted message from this link
-  if (isset($_POST['open'])) {
-    $ciphering="AES256";
-    $iv_length=openssl_cipher_iv_length($ciphering);
-    $options=0;
+  //if "open" value is set, but message is not encrypted by PSK, and this is not download option - showing up encrypted message from this link
+  if (isset($_POST['open']) && (!isset($_POST['pskOpInput'])) && (!isset($_POST['dwlAttachment']))) {
     $encryption_iv=mb_substr($token,0,6).mb_substr($token,0,6)."1467";
-    $encryption_key=$key;
-    $decrypted_text=openssl_decrypt($encrypted_text, $ciphering, $encryption_key, $options, $encryption_iv);
     ?>
     <div class="bg-light p-5 rounded">
       <div class="col-sm-8 mx-auto">
-        <h1><?php echo($lang_text);?></h1>  
-         <h3><pre><?php if ($encrypted_text!="") { echo($decrypted_text); } else { echo("<font color=\"red\">$lang_err7</font>"); }?></pre></h3>
-         <?php if ($file != "") {?>
-         <div><form method="POST" action="">
-          <button class="btn-lg btn-primary" style="width1: 95vw;" type="submit" name="dwlAttachment"><?php echo($lang_main6);?></button>
-          </form></div>
-          <?php 
-            $mysqli="UPDATE `messages` set message='' WHERE id='".$id."'";
-            $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
-            $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`,`type`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."','text');";
-            $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
-          } ?>
-        <a href="closeWindow();"><?php echo($lang_cls);?></a>
+        <h1><?php echo($lang_text); ?></h1>  
+         <h3><pre><?php
+        //if 'message' field in DB is not empty
+        if (!empty($encrypted_text)) {
+          //if 'encrypted_text' is not equal to "-" which means the text message wasn't added while creation of message
+          if ($encrypted_text != "-") {
+            $decrypted_text=openssl_decrypt($encrypted_text, $ciphering, $key, $options, $encryption_iv);
+            echo("$decrypted_text"); 
+          }
+        } else { 
+          echo("<font color=\"red\">$lang_err7</font>"); 
+        }?></pre></h3>
+        <?php if (!empty($fileName)) {?>
+        <div><form method="POST" action="">
+        <button class="btn-lg btn-primary" style="width1: 95vw;" type="submit" name="dwlAttachment"><?php echo($lang_main6);?></button>
+        </form></div>
+        <?php 
+          $mysqli="UPDATE `messages` set message='' WHERE id='".$id."'";
+          $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
+          $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`,`type`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."','text');";
+          $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
+        } else {
+        $mysqli="DELETE FROM `messages` WHERE id='".$id."'";
+        $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
+        $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`,`type`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."','text');";
+        $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC); } ?>
+        <br><a href="closeWindow();"><?php echo($lang_cls);?></a>
       </div>
     </div>
     <?php
     die();
   }
-  if (isset($_POST['dwlAttachment'])) {
-    $ciphering="AES256";
-    $iv_length=openssl_cipher_iv_length($ciphering);
-    $options=0;
+  //when we open a message with additional password encoding
+  if (isset($_POST['open']) && (isset($_POST['pskOpInput']))) {
     $encryption_iv=mb_substr($token,0,6).mb_substr($token,0,6)."1467";
-    $encryption_key=$key;
-    $decrypted_file=openssl_decrypt($file, $ciphering, $encryption_key, $options, $encryption_iv);
-    file_put_contents("/tmp/".$fileName,base64_decode($decrypted_file));
-    $file_path = "/tmp/".$fileName;
-    $file_name = "$fileName";
-    header('Content-Type: application/pdf');
+    //now when we got a PSK - we decrypt the attachment from user's password if it exists
+    if (!empty($fileName) && (!empty($_POST['pskOpInput']))) {
+      $decrypted_file=openssl_decrypt($file,$ciphering,$_POST['pskOpInput'],$options,$encryption_iv);
+      $mysqli="UPDATE `messages` SET file='".$decrypted_file."' WHERE id='".$id."';";
+      $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
+    }
+    ?>
+    <div class="bg-light p-5 rounded">
+      <div class="col-sm-8 mx-auto">
+        <h1><?php echo($lang_text);?></h1>  
+         <h3><pre><?php 
+         if (empty($_POST['pskOpInput']))
+         {
+          echo("<script>alert('".$lang_err8."');</script>");
+          echo("<p><font color=\"red\">".$lang_err8."</font></p>");
+          echo("<p><a href=\"https://".$_SERVER['SERVER_NAME'].$_SERVER['REQUEST_URI']."\">".$lang_main10."</a></p>");
+          die();
+         }
+         //if 'message' field in DB is not empty that means the message wasn't viewed 
+         if (!empty($encrypted_text)) {
+          $decrypted_text=openssl_decrypt($encrypted_text, $ciphering, $_POST['pskOpInput'], $options, $encryption_iv);
+          $decrypted_text=openssl_decrypt($decrypted_text, $ciphering, $key, $options, $encryption_iv);
+          //if 'decrypted_text' is not empty that means the PSK is correct
+          if (!empty($decrypted_text)) {
+            echo($decrypted_text); 
+          } else {
+            //if 'decrypted_text' is empty that means the PSK is incorrect.Show error message.
+            echo("<font color=\"red\">".$lang_err9."</font>");
+          }
+        } else { 
+          echo("<font color=\"red\">$lang_err7</font>"); 
+        }?>
+        </pre></h3>
+         <?php if (!empty($fileName)) {?>
+         <div><form method="POST" action="">
+          <button class="btn-lg btn-primary" style="width1: 95vw;" type="submit" name="dwlAttachment"><?php echo($lang_main6);?></button>
+          </form></div>
+          <?php
+            $mysqli="UPDATE `messages` set message='' WHERE id='".$id."'";
+            $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
+            $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`,`type`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."','text');";
+            $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
+
+          } else {
+          $mysqli="DELETE FROM `messages` WHERE id='".$id."'";
+          $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
+          $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`,`type`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."','text');";
+          $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC); } ?>
+          <br><a href="closeWindow();"><?php echo($lang_cls);?></a>
+          </div>
+        </div>
+        <?php
+        die();
+      }
+  if (isset($_POST['dwlAttachment'])) {
+    $encryption_iv=mb_substr($token,0,6).mb_substr($token,0,6)."1467";
+    $decrypted_file=openssl_decrypt($file, $ciphering, $key, $options, $encryption_iv);
+    $attachment=base64_decode($decrypted_file);
+    header('Content-Type: application/octet-stream');
     header('Content-Disposition: attachment; filename="'.$fileName.'"');
-    readfile($file_path);
+    echo($attachment);
     $mysqli="DELETE FROM `messages` WHERE id='".$id."'";
     $mysqli_dbh->query($mysqli, PDO::FETCH_ASSOC);
     $mysqli="INSERT INTO `msglogs` (`msgid`,`msglink`,`ip`,`type`) VALUES ('".$id."','".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["SERVER_NAME"]."/?link=".$link."','".$_SERVER['REMOTE_ADDR']."','file');";
@@ -261,7 +342,7 @@ $salt=rand(0,9).rand(0,9).rand(0,9).rand(0,9).rand(0,9).rand(0,9);
 $token=$salt.":".MD5($salt.":".$key);
 setcookie("CSRF", $token, time() + 600, "/");
 ?>
-  <div id="global-block" style="width: 95vw; height: 95vh; padding-left: 3rem; float: center; postion: relative;">
+  <div id="global-block" style="width: 99vw; height: 99vh; padding-left: 1rem; float: center; postion: relative;">
     <div id="top-block" style="margin-top: 10px; text-align: center; postion: absolute; padding-right: 1rem;">
       <h1 class="fw-bold lh-1 mb-3"><?php echo($lang_main);?></h1>
       <p class="col-lg-101 fs-51" style="text-align: center;"><?php echo($lang_main2);?></p>
@@ -274,11 +355,12 @@ setcookie("CSRF", $token, time() + 600, "/");
           <label for="textInput"><?php echo($lang_main3);?></label>
         </div>
         <div class="form-floating1 mb-1">
-          <input type="number" style="width: 210px;"  class="form-control" id="hoursInput" min="0" max="24" value="1" name="timeValid">
+          <input type="number" style="width: 210px;" class="form-control" id="hoursInput" min="0" max="24" value="1" name="timeValid">
           <label for="hoursInput"><?php echo($lang_main4);?></label>
-          <div class="form-floating2 mb-2">
-            Отправить файл: <input name="userfile" type="file" />
-          </div>
+          <input type="text" style="width: 210px;" class="form-control" id="pskInput" value="" name="pskInput">
+          <label for="pskInput"><?php echo($lang_main7);?></label>
+          <input class="form-control" style="width: 210px;" id="userfile" name="userfile" type="file" />
+          <label for="userfile"><?php echo($lang_main8);?></label>
         </div>
         <hr class="my-4">
         <button class="btn-lg btn-primary" style="width1: 95vw;" type="submit" name="create"><?php echo($lang_main5);?></button>
